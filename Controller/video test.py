@@ -2,7 +2,7 @@ import cv2
 from ultralytics import YOLO
 
 # Load the YOLOv8 model (replace 'yolov8n.pt' with your custom weights if applicable)
-model = YOLO(r'C:\Users\92306\PycharmProjects\TrafficGuardian\yolov8mtrafficmodel.pt')  # Use 'yolov8n.pt', 'yolov8s.pt', etc., or your custom model
+model = YOLO(r'C:\Users\Ahsan ikram\PycharmProjects\TrafficGuardian\yolov8mtrafficmodel.pt')  # Use 'yolov8n.pt', 'yolov8s.pt', etc., or your custom model
 
 # Path to the input video
 video_path = r"C:\Users\92306\PycharmProjects\TrafficGuardian\5927708-hd_1080_1920_30fps.mp4"

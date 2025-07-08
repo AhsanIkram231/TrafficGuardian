@@ -45,7 +45,7 @@ TrafficGuardian is a smart backend system built in Python to automate the detect
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/MohsinALi1a1/TrafficGuardian.git
+   git clone https://github.com/AhsanIkram231/TrafficGuardian.git
    cd TrafficGuardian
    ```
 
@@ -81,7 +81,7 @@ You can implement token-based authentication to secure the endpoints for admin, 
 
 ## 👨‍💻 Contributors
 
-- **Mohsin Ali** – Backend Developer & AI Integration
+- **Ahsan Ikram** – Backend Developer & AI Integration
 
 
 ## 📄 License
@@ -94,5 +94,5 @@ This project is part of an academic final year project and is not licensed for c
 
 Have questions or suggestions?
 
-- Email: mohsinali1a1@gmail.com
-- GitHub: [MohsinALi1a1](https://github.com/MohsinALi1a1)
+- Email: ahsanikramn231@gmail.com
+- GitHub: [AhsanIkram231](https://github.com/AhsanIkram231)

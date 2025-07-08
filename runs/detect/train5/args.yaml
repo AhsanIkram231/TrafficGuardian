@@ -1,6 +1,6 @@
 task: detect
 mode: train
-model: C:\Users\92306\PycharmProjects\TrafficGuardian\yolov8s.pt
+model: C:\Users\Ahsan ikram\PycharmProjects\TrafficGuardian\yolov8s.pt
 data: C:\Users\92306\PycharmProjects\TrafficGuardian\traffic guardian.v2i.yolov8\data.yaml
 epochs: 30
 time: null
