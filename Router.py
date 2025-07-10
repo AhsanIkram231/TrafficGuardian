@@ -1,5 +1,6 @@
 import io
 import os
+import threading
 from pydoc import locate
 import socket
 
@@ -1086,6 +1087,7 @@ def get_all_dutyroster_of_warden_byid():
         print(dutyroster_list)
         return jsonify(dutyroster_list)
     except Exception as exp:
+        print( str(exp))
         return jsonify({'error': str(exp)}), 500
 
 ########################################  Vehicle  ############################################
@@ -1741,6 +1743,70 @@ def upload_images():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+
+
+@app.route('/upload-multicameraimages_task', methods=['POST'])
+def upload_images_task():
+    try:
+        print("==> Incoming request to /upload-multicameraimages")
+        print("Form Data:", request.form)
+
+        print("Files Received:", request.files)
+
+        indices_str = request.form.get('image_indices', '')
+        date_Str = request.form.get('date', '')
+        print(f"Receive Date {date_Str}")
+        date_Str=date_Str.replace('"','')
+        print(f"Updated Receive Date {date_Str}")
+        indices = indices_str.split(',') if indices_str else []
+
+        print(f"Parsed indices: {indices}")
+
+        uploaded_info = []
+        camera_images_list = []
+
+        files = request.files.getlist('images')
+        print(f"Number of images received: {len(files)}")
+
+        for i, image_file in enumerate(files):
+            if i < len(indices):
+                camera_id = indices[i]
+            else:
+                camera_id = str(i)
+
+            print(f"Processing image {i}: camera_id={camera_id}, filename={image_file.filename}")
+
+            if image_file.filename != '':
+                try:
+                    image = Image.open(io.BytesIO(image_file.read()))
+                    camera_images_list.append({
+                        "cam_id": camera_id,
+                        "image": image
+                    })
+
+                    uploaded_info.append({
+                        'camera_id': camera_id,
+                        'filename': image_file.filename,
+                        'status': 'stored in memory'
+                    })
+
+                except Exception as img_err:
+                    print(f"[ERROR] Failed to read image {i}: {img_err}")
+                    continue
+
+        print("Calling detection logic with images:")
+        print(f"camera_images_list: {[item['cam_id'] for item in camera_images_list]}")
+
+        # Call the detection function
+        response, code = ChallanController.autoviolationdetection_fromcameraimage_task(camera_images_list,date_Str)
+        print("Detection completed. Returning response.")
+        return response, code
+
+    except Exception as e:
+        print("[ERROR] Exception in /upload-multicameraimages:", str(e))
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/parallel_simulation-multicameraimages', methods=['POST'])
 def parallel_simulation_upload_images():
     try:
@@ -2259,8 +2325,60 @@ def change_stolen_bike_status():
     except Exception as exp:
         return jsonify({'error': str(exp)}), 500
 
+@app.route('/check_challanallowed', methods=['POST'])
+def check_challan_allowed():
+    try:
+        data = request.get_json()
+        license_plate = data.get("license_plate")
+
+        if not license_plate:
+            return jsonify({"status": "Error", "reason": "license_plate is required"}), 400
+        response=ChallanController.is_challan_allowed(license_plate)
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({
+            "status": "Error",
+            "reason": str(e)
+        }), 500
+
+
+
+@app.route("/assign-warden-duty", methods=["POST"])
+def assign_warden_duty():
+    try:
+        data = request.get_json()
+        return WardenChowkiController.assign_warden_duties(data)
+    except Exception as e:
+        print(str(e))
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
+
+# This Only Show  Next Custom Hobs List of Specific Naka each Hob Seperate
+@app.route('/getallplaceDistance', methods=['POST'])
+def getallplaceDistance():
+    try:
+        data = request.get_json()
+        from_place_id = data.get('from_place_id')
+        to_place_id = data.get('to_place_id')
+        print(f'from_place_id {from_place_id}')
+        print(f'to_place_id {to_place_id}')
+
+        if from_place_id is None or to_place_id is None:
+            return jsonify({"error": "from_place_id and to_place_id are required"}), 400
+
+        return LocationController.check_distance(from_place_id,to_place_id)
+
+    except Exception as exp:
+        print(f"Error in /naka/nexthops: {str(exp)}")
+        return jsonify({'error': str(exp)}), 500
+
 
 if __name__ == "__main__":
+    # cleanup_thread = threading.Thread(target=ChallanController.clean_old_vehicles(), daemon=True)
+    # cleanup_thread.start()
+
     app.run(host='0.0.0.0', port=4321, debug=True)
 
 #

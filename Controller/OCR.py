@@ -7,7 +7,7 @@
 #
 # pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 # # Load the image
-# image_path = r'C:\Users\Syed Mohsin Ali\PycharmProjects\TrafficGuardian\Predictions\saved_images1\1_bike_2.jpg'
+# image_path = r'C:\Users\Ahsan ikram\PycharmProjects\TrafficGuardian\Predictions\saved_images1\1_bike_2.jpg'
 #
 # image = cv2.imread(image_path)
 #

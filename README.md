@@ -1,4 +1,3 @@
-
 # 🚨 TrafficGuardian - Motorbike Safety Violation Detection System
 
 TrafficGuardian is a smart backend system built in Python to automate the detection and reporting of traffic safety violations related to motorbikes. This project is designed to assist law enforcement in identifying violators through camera feeds and alerting nearby traffic wardens in real-time.

@@ -1,14 +1,16 @@
+from operator import truediv
+
 from numpy import indices
 from sqlalchemy import desc
 from Controller.FeatureExtraction import FeatureExtraction
 
 import Controller
 from Controller import CameraChowkiController, OCR, ImageControllerAndNotification, YoloController, \
-    WardenChowkiController
+    WardenChowkiController, LocationController
 from Model import User, Vehicle, db, Violation, ViolationFine, ViolationHistory, ViolationDetails, Challan, \
     ChallanViolations, ViolationImages, NakaGraph, StolenBike
 from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime
+from datetime import datetime, timedelta
 import cv2
 import io
 import os
@@ -18,10 +20,395 @@ from flask import  request ,jsonify
 import re
 
 from Model.Notification import Notification
+from datetime import datetime, timedelta
+import threading
+import time
 
+# Global list to hold detected vehicles
+detected_vehicles= []
+Travel_Record= []
+detected_vehicles_overspeed = []
 
 class ChallanController:
+
     #################################  Vehicle ########################################################
+    #
+    # @staticmethod
+    # def add_detected_vehicle(plate_number, camera_id ,imagelist):
+    #     now = datetime.utcnow()
+    #     existing = next((v for v in detected_vehicles if v["license_plate"].lower() == plate_number.lower()), None)
+    #
+    #     if existing:
+    #         time_diff = now - existing["timestamp"]
+    #
+    #         if time_diff > timedelta(minutes=2):
+    #             # If record is older than 2 minutes, replace it
+    #             detected_vehicles.remove(existing)
+    #             detected_vehicles.append({
+    #                 "license_plate": plate_number,
+    #                 "timestamp": now,
+    #                 "camera_id": camera_id,
+    #                 "imagelist":imagelist
+    #             })
+    #         elif time_diff < timedelta(minutes=1):
+    #             cam_id=existing["camera_id"]
+    #
+    #             camera = CameraChowkiController.get_camera_by_notify(cam_id)
+    #
+    #             if 'error' not in camera:
+    #                 direction_id=camera.get('Direction_id')
+    #                 camera_location=camera.get('Direction')
+    #                 image_list=existing["imagelist"]
+    #                 direction=LocationController.get_direction_by_id(direction_id)
+    #
+    #                 if 'error' not in direction:
+    #                     place_id=direction.get('place_id')
+    #
+    #             camera_1 = CameraChowkiController.get_camera_by_notify(camera_id)
+    #
+    #             if 'error' not in camera_1:
+    #                 direction_id_1 = camera.get('Direction_id')
+    #                 camera_location_1 = camera.get('Direction')
+    #                 image_list_1 = image_list
+    #                 direction_1 = LocationController.get_direction_by_id(direction_id_1)
+    #
+    #                 if 'error' not in direction_1:
+    #                     place_id_1 = direction.get('place_id')
+    #
+    #             distance = LocationController.get_distance_between_places(place_id, place_id_1)
+    #             if distance is not None:
+    #                 print(f"Distance between place 2 and 5 is {distance} KM")
+    #             else:
+    #                 print("Distance not found.")
+    #
+    #             if(distance>10):
+    #
+    #                 bikenumber=plate_number
+    #
+    #                 print(f"Bike Number of Violator is {bikenumber}")
+    #                 try:
+    #                     bike = ChallanController.get_vehicle_by_licenseplate(bikenumber)
+    #                     if 'error' in bike:
+    #                         message = ChallanController.add_vehicle(bikenumber, 'Bike')
+    #                         if 'Successfully' in message:
+    #                             bike = ChallanController.get_vehicle_by_licenseplate(bikenumber)
+    #                     print(bike['id'], "bike id")
+    #                 except Exception as e:
+    #                     print(f"error in bike : {str(e)}")
+    #                     return jsonify({"message": f"An error occurred in getting Bike: {str(e)}"}), 500
+    #
+    #                 print(bike)
+    #                 status = 'Pending'
+    #                 created_date = datetime.today().strftime('%Y-%m-%d')
+    #                 print(cam_id, bikenumber, camera_location, status, created_date)
+    #                 try:
+    #                     print(f"Stolen Bike detected  {len(image_list)}")
+    #                     response, code = ChallanController.add_violation_history_and_details_forstolenBikes(bike['id'],
+    #                                                                                                         camera_location,
+    #                                                                                                         status,
+    #                                                                                                         cam_id, [9],
+    #                                                                                                         image_list,
+    #                                                                                                         bikenumber)
+    #                     if code == 201:
+    #                         print("Sucessfully Sent Notification of Stolen Bike")
+    #                     else:
+    #                         print("Error in Sent Notification of Stolen Bike")
+    #                 except Exception as e:
+    #                     print(f"error in add Violation History : {str(e)}")
+    #                     return jsonify(
+    #                         {"message": f"An error occurred add Stolen Bike Violation History: {str(e)}"}), 500
+    #
+    #
+    #                 print("alert second bike");
+    #                 created_date = datetime.today().strftime('%Y-%m-%d')
+    #                 print(camera_id, bikenumber, camera_location_1, status, created_date)
+    #                 try:
+    #                     print(f"Stolen Bike detected  {len(image_list)}")
+    #                     response, code = ChallanController.add_violation_history_and_details_forstolenBikes(bike['id'],
+    #                                                                                                         camera_location_1,
+    #                                                                                                         status,
+    #                                                                                                         camera_id, [9],
+    #                                                                                                         image_list_1,
+    #                                                                                                         bikenumber)
+    #                     if code == 201:
+    #                         print("Sucessfully Sent Notification of Stolen Bike")
+    #                     else:
+    #                         print("Error in Sent Notification of Stolen Bike")
+    #                 except Exception as e:
+    #                     print(f"error in add Violation History : {str(e)}")
+    #                     return jsonify(
+    #                         {"message": f"An error occurred add Stolen Bike Violation History: {str(e)}"}), 500
+    #
+    #
+    #         else:
+    #             # Between 1 and 2 minutes → remove and add new one
+    #             detected_vehicles.remove(existing)
+    #             detected_vehicles.append({
+    #                 "license_plate": plate_number,
+    #                 "timestamp": now,
+    #                 "camera_id": camera_id
+    #             })
+    #     else:
+    #         # Not found, just add it
+    #         detected_vehicles.append({
+    #             "license_plate": plate_number,
+    #             "timestamp": now,
+    #             "camera_id": camera_id
+    #         })
+
+
+
+
+
+    @staticmethod
+    def add_detected_vehicle(plate_number, camera_id, imagelist):
+        now = datetime.utcnow()
+        print(f"[DEBUG] New detection - Plate: {plate_number}, Camera: {camera_id}, Time: {now}")
+
+        existing = next((v for v in detected_vehicles if v["license_plate"].lower() == plate_number.lower()), None)
+
+        if existing:
+            time_diff = now - existing["timestamp"]
+            print(f"[DEBUG] Existing record found. Time difference: {time_diff.total_seconds()} seconds")
+
+            if time_diff > timedelta(minutes=2):
+                print("[DEBUG] >2 minutes: Replacing old record")
+                detected_vehicles.remove(existing)
+                detected_vehicles.append({
+                    "license_plate": plate_number,
+                    "timestamp": now,
+                    "camera_id": camera_id,
+                    "imagelist": imagelist
+                })
+
+            elif time_diff < timedelta(minutes=1):
+                print("[DEBUG] <1 minute: Checking distance between locations")
+
+                try:
+                    # Camera 1 (Old)
+                    cam_id = existing["camera_id"]
+                    camera = CameraChowkiController.get_camera_by_notify(cam_id)
+                    if 'error' in camera:
+                        print("[ERROR] Could not fetch old camera info")
+                        return
+
+                    direction_id = camera.get('Direction_id')
+                    camera_location = camera.get('Direction')
+                    image_list = existing.get("imagelist", [])
+                    direction = LocationController.get_direction_by_id(direction_id)
+                    if 'error' in direction:
+                        print("[ERROR] Could not fetch old direction info")
+                        return
+
+                    place_id = direction.get('place_id')
+                    print(f"[DEBUG] Old place ID: {place_id}")
+
+                    # Camera 2 (New)
+                    camera_1 = CameraChowkiController.get_camera_by_notify(camera_id)
+                    if 'error' in camera_1:
+                        print("[ERROR] Could not fetch new camera info")
+                        return
+
+                    direction_id_1 = camera_1.get('Direction_id')
+                    camera_location_1 = camera_1.get('Direction')
+                    image_list_1 = imagelist
+                    direction_1 = LocationController.get_direction_by_id(direction_id_1)
+                    if 'error' in direction_1:
+                        print("[ERROR] Could not fetch new direction info")
+                        return
+
+                    place_id_1 = direction_1.get('place_id')
+                    print(f"[DEBUG] New place ID: {place_id_1}")
+
+                    # Distance Calculation
+                    distance = LocationController.get_distance_between_places(place_id, place_id_1)
+                    if distance is not None:
+                        print(f"[DEBUG] Distance between places: {distance} KM")
+                    else:
+                        print("[ERROR] Distance not found")
+                        return
+
+                    if distance > 10:
+                        print("[ALERT] Distance > 10 KM → Sending Stolen Bike Alert")
+                        bikenumber = plate_number
+
+                        try:
+                            bike = ChallanController.get_vehicle_by_licenseplate(bikenumber)
+                            if 'error' in bike:
+                                message = ChallanController.add_vehicle(bikenumber, 'Bike')
+                                if 'Successfully' in message:
+                                    bike = ChallanController.get_vehicle_by_licenseplate(bikenumber)
+                            print(f"[DEBUG] Bike ID: {bike['id']}")
+                        except Exception as e:
+                            print(f"[ERROR] Getting/Creating bike: {str(e)}")
+                            return jsonify({"message": f"Bike error: {str(e)}"}), 500
+
+                        status = 'Pending'
+                        created_date = datetime.today().strftime('%Y-%m-%d')
+
+                        # First Violation
+                        try:
+                            print(f"[DEBUG] Sending Violation Alert 1 - Camera: {cam_id}")
+                            response, code = ChallanController.add_violation_history_and_details_forstolenBikes(
+                                bike['id'], camera_location, status, cam_id, [9], image_list, bikenumber)
+                            print("[DEBUG] Alert 1 Sent" if code == 201 else "[ERROR] Alert 1 Failed")
+                        except Exception as e:
+                            print(f"[ERROR] Alert 1 Exception: {str(e)}")
+                            return jsonify({"message": f"Violation 1 Error: {str(e)}"}), 500
+
+                        # Second Violation
+                        try:
+                            print(f"[DEBUG] Sending Violation Alert 2 - Camera: {camera_id}")
+                            response, code = ChallanController.add_violation_history_and_details_forstolenBikes(
+                                bike['id'], camera_location_1, status, camera_id, [9], image_list_1, bikenumber)
+                            print("[DEBUG] Alert 2 Sent" if code == 201 else "[ERROR] Alert 2 Failed")
+                        except Exception as e:
+                            print(f"[ERROR] Alert 2 Exception: {str(e)}")
+                            return jsonify({"message": f"Violation 2 Error: {str(e)}"}), 500
+
+                    else:
+                        print("[DEBUG] Distance <= 10 KM → No alert")
+
+                except Exception as e:
+                    print(f"[ERROR] Exception during stolen bike logic: {str(e)}")
+                    return jsonify({"message": f"Internal Error: {str(e)}"}), 500
+
+            else:
+                print("[DEBUG] Between 1 and 2 minutes: Updating record")
+                detected_vehicles.remove(existing)
+                detected_vehicles.append({
+                    "license_plate": plate_number,
+                    "timestamp": now,
+                    "camera_id": camera_id,
+                    "imagelist": imagelist
+                })
+
+        else:
+            print("[DEBUG] No existing record: Adding new vehicle")
+            detected_vehicles.append({
+                "license_plate": plate_number,
+                "timestamp": now,
+                "camera_id": camera_id,
+                "imagelist": imagelist
+            })
+
+
+
+    @staticmethod
+    def CheckOverspeed_detected_vehicle(plate_number, camera_id,imagelist,time):
+        now = datetime.strptime(time, '%Y-%m-%dT%H:%M:%S.000')
+        created_date = datetime.today().strftime('%Y-%m-%d')
+
+        print(f"[DEBUG] New detection - Plate: {plate_number}, Camera: {camera_id}, Time: {now}")
+
+        existing = next((v for v in detected_vehicles_overspeed if v["license_plate"].lower() == plate_number.lower()), None)
+
+        if existing:
+            time_diff = now - existing["timestamp"]
+            print(f"[DEBUG] Existing record found. Time difference: {time_diff.total_seconds()/60} minutes")
+
+            try:
+                # Camera 1 (Old)
+                cam_id = existing["camera_id"]
+                camera = CameraChowkiController.get_camera_by_notify(cam_id)
+                if 'error' in camera:
+                    print("[ERROR] Could not fetch old camera info")
+                    return
+
+                direction_id = camera.get('Direction_id')
+                camera_location = camera.get('Direction')
+                image_list = existing.get("imagelist", [])
+                direction = LocationController.get_direction_by_id(direction_id)
+                if 'error' in direction:
+                    print("[ERROR] Could not fetch old direction info")
+                    return
+
+                place_id = direction.get('place_id')
+                print(f"[DEBUG] Old place ID: {place_id}")
+
+
+                # Camera 2 (New)
+                camera_1 = CameraChowkiController.get_camera_by_notify(camera_id)
+                if 'error' in camera_1:
+                    print("[ERROR] Could not fetch new camera info")
+                    return
+
+                direction_id_1 = camera_1.get('Direction_id')
+                camera_location_1 = camera_1.get('Direction')
+
+                direction_1 = LocationController.get_direction_by_id(direction_id_1)
+                if 'error' in direction_1:
+                    print("[ERROR] Could not fetch new direction info")
+                    return
+
+                place_id_1 = direction_1.get('place_id')
+                print(f"[DEBUG] New place ID: {place_id_1}")
+
+                # Distance Calculation
+                distance = LocationController.check_distance(place_id, place_id_1)
+
+                dist=distance['Distance']
+
+                print(time_diff)
+                Speed = dist/(time_diff.total_seconds()/3600)
+                print(f"Speed is {Speed}")
+
+                if Speed >= 50:
+                    print("[ALERT] Speed > 50 KM → Sending Overspeed Bike Alert")
+                    return True
+
+
+                else:
+                    print("[DEBUG] Between 1 and 2 minutes: Updating record")
+                    distance=existing['Distance']
+                    olddate=existing['CreateDate']
+
+                    if olddate<created_date:
+                        olddate=created_date
+
+                    distance=distance+dist
+                    detected_vehicles_overspeed.remove(existing)
+                    detected_vehicles_overspeed.append({
+                        "license_plate": plate_number,
+                        "timestamp": now,
+                        "camera_id": camera_id,
+                        "imagelist":imagelist,
+                        "Distance":distance,
+                        "CreateDate":olddate
+                        })
+                    return False
+
+            except Exception as e:
+                print(f"[ERROR] Calculating Distance  : {str(e)}")
+                return jsonify({"message": f"Distance error: {str(e)}"}), 500
+
+
+
+        else:
+            print("[DEBUG] No existing record: Adding new vehicle")
+            detected_vehicles_overspeed.append({
+                "license_plate": plate_number,
+                "timestamp": now,
+                "camera_id": camera_id,
+                "imagelist": imagelist,
+                "Distance": 0,
+                "CreateDate":created_date
+            })
+
+            return  False
+
+    @staticmethod
+    def clean_old_vehicles():
+        while True:
+            time.sleep(60)  # Run every 1 minute
+            now = datetime.utcnow()
+            # Remove vehicles older than 2 minutes
+            detected_vehicles[:] = [
+                v for v in detected_vehicles
+                if now - v["timestamp"] <= timedelta(minutes=5)
+            ]
+
+
     @staticmethod
     def get_all_vehicles():
         vehicles = Vehicle.query.all()
@@ -482,6 +869,141 @@ class ChallanController:
                         recipient_id=warden.id,
                         type_="Stolen Bike Alert",
                         message=f"🚨 Vehicle {bikenumber} , Stolen Bike Founf in your assigned area: {location}. Please review and take action.",
+                        violation_id=violation_history.id
+                    )
+                    print(f"🔔 Notification sent to Warden ID: {warden.id}")
+
+            return {
+                "successfully": "Violation history and details added successfully",
+                "violation_history_id": violation_history.id
+            }, 201
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            print(f"Error occurred: {e}")
+            return {
+                "error": "Failed to add violation history and details",
+                "details": str(e)
+            }, 500
+
+    @staticmethod
+    def add_violation_history_and_details_forTravel(vehicle_id, location, status, camera_id, violation_ids,
+                                                         image_list,
+                                                         bikenumber=None):
+        try:
+            # Validate inputs here if necessary
+
+            violation_history = ViolationHistory(
+                vehicle_id=vehicle_id,
+                location=location,
+                status=status,
+                camera_id=camera_id
+            )
+
+            db.session.add(violation_history)
+            db.session.flush()
+
+            for violation_id in violation_ids:
+                violation_detail = ViolationDetails(
+                    violation_history_id=violation_history.id,
+                    violation_id=violation_id
+                )
+                db.session.add(violation_detail)
+
+            db.session.commit()
+
+            print("Violation history and details added successfully.")
+            save_imag_path_list = ChallanController.save_images(image_list, violation_history.id)
+            for path in save_imag_path_list:
+                violation_images = ViolationImages(
+                    violation_id=violation_history.id,
+                    image_path=path
+                )
+                db.session.add(violation_images)
+
+            db.session.commit()
+
+            # Get on-duty wardens for the camera
+            wardens = CameraChowkiController.get_on_duty_wardens(camera_id)
+
+            # Check if any wardens were found
+            if not wardens:
+                print(f"No on-duty wardens found for camera_id={camera_id}")
+            else:
+                for warden in wardens:
+                    response = Controller.ImageControllerAndNotification.add_notification(
+                        recipient_type="TrafficWarden",
+                        recipient_id=warden.id,
+                        type_="Travel Limit Exced of  Bike Alert",
+                        message=f"🚨 Vehicle {bikenumber} , Bike Exceed Travel limit  in your assigned area: {location}. Please review and take action.",
+                        violation_id=violation_history.id
+                    )
+                    print(f"🔔 Notification sent to Warden ID: {warden.id}")
+
+            return {
+                "successfully": "Violation history and details added successfully",
+                "violation_history_id": violation_history.id
+            }, 201
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            print(f"Error occurred: {e}")
+            return {
+                "error": "Failed to add violation history and details",
+                "details": str(e)
+            }, 500
+
+
+    @staticmethod
+    def add_violation_history_and_details_forTax(vehicle_id, location, status, camera_id, violation_ids,
+                                                         image_list,
+                                                         bikenumber=None):
+        try:
+            # Validate inputs here if necessary
+
+            violation_history = ViolationHistory(
+                vehicle_id=vehicle_id,
+                location=location,
+                status=status,
+                camera_id=camera_id
+            )
+
+            db.session.add(violation_history)
+            db.session.flush()
+
+            for violation_id in violation_ids:
+                violation_detail = ViolationDetails(
+                    violation_history_id=violation_history.id,
+                    violation_id=violation_id
+                )
+                db.session.add(violation_detail)
+
+            db.session.commit()
+
+            print("Violation history and details added successfully.")
+            save_imag_path_list = ChallanController.save_images(image_list, violation_history.id)
+            for path in save_imag_path_list:
+                violation_images = ViolationImages(
+                    violation_id=violation_history.id,
+                    image_path=path
+                )
+                db.session.add(violation_images)
+
+            db.session.commit()
+
+            # Get on-duty wardens for the camera
+            wardens = CameraChowkiController.get_on_duty_wardens(camera_id)
+
+            # Check if any wardens were found
+            if not wardens:
+                print(f"No on-duty wardens found for camera_id={camera_id}")
+            else:
+                for warden in wardens:
+                    response = Controller.ImageControllerAndNotification.add_notification(
+                        recipient_type="TrafficWarden",
+                        recipient_id=warden.id,
+                        type_="TAX  Bike Alert",
+                        message=f"🚨 Vehicle {bikenumber} , Drive 100km Found in your assigned area: {location}. Please review and take action.",
                         violation_id=violation_history.id
                     )
                     print(f"🔔 Notification sent to Warden ID: {warden.id}")
@@ -1037,6 +1559,29 @@ class ChallanController:
             print(f"[ERROR] Exception occurred while checking stolen bike: {e}")
             return False
 
+    def Check_Driven(plate_number: str) -> bool:
+        try:
+            print(f"[DEBUG] Checking if bike with plate '{plate_number}' ")
+            created = datetime.today().strftime('%Y-%m-%d')
+
+            existing = next(
+                (v for v in detected_vehicles_overspeed if v["license_plate"].lower() == plate_number.lower()), None)
+
+            if existing:
+                if  created <= existing["CreateDate"]:
+                    dict=existing["Distance"]
+                    if dict >10:
+                        return True
+                else:
+                    return False  # No match found
+            else:
+
+                return False  # No match found
+
+        except Exception as e:
+            print(f"[ERROR] Exception occurred while Checking Travel record: {e}")
+            return False
+
     UPLOAD_FOLDER = 'uploads'
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -1094,9 +1639,9 @@ class ChallanController:
                                             print("🚨 Bike is reported as stolen and active!")
                                         else:
                                             print("✅ No active stolen report for this bike.")
-                                        cv2.imshow(f"Cropped License Plate {i + 1}", cropped_plate)
-                                        cv2.waitKey(0)
-                                        cv2.destroyAllWindows()
+                                        # cv2.imshow(f"Cropped License Plate {i + 1}", cropped_plate)
+                                        # cv2.waitKey(0)
+                                        # cv2.destroyAllWindows()
                                         cropped_plate = Image.fromarray(cropped_plate)
                                         image_list.append(cropped_plate)
                                     else:
@@ -1121,8 +1666,12 @@ class ChallanController:
                             case _:
                                 print("Unknown camera type.")
 
+                bikenumber = extracted_plate_text
+                if bikenumber != "":
+                    ChallanController.add_detected_vehicle(bikenumber, cam_id, image_list)
 
-                bikenumber=extracted_plate_text
+
+
                 print(f"Bike Number of Violator is {bikenumber}")
                 try:
                     bike = ChallanController.get_vehicle_by_licenseplate(bikenumber)
@@ -1180,6 +1729,175 @@ class ChallanController:
                         print(f"error in add Violation History : {str(e)}")
                         return jsonify(
                             {"message": f"An error occurred add Stolen Bike Violation History: {str(e)}"}), 500
+                try:
+                    print(f"Image Length Which Save against this violation {len(image_list)}")
+                    response, code = ChallanController.add_violation_history_and_details(bike['id'],
+                                                                                         camera_location, status,
+                                                                                         cam_id,
+                                                                                         violations_ids,image_list ,bikenumber)
+
+                except Exception as e:
+                    print(f"error in add Violation History : {str(e)}")
+                    return jsonify({"message": f"An error occurred Add Violation History: {str(e)}"}), 500
+
+               # Return the result in JSON format
+                return response,200
+            else:
+                print("message File has no filename")
+                return jsonify({"message": "File has no filename"}), 400
+
+        except Exception as e:
+            # Handle exceptions that may occur
+            print(str(e))
+            return {"message": f"An error occurred: {str(e)}"}, 500
+
+
+    def autoviolationdetection_fromcameraimage_task(camera_images,date):
+        try:
+            stolen=False
+            if  camera_images:
+                image_list = []
+                for item in camera_images:
+                    cam_id = item['cam_id']
+                    image = item['image']
+
+                    # print(type(cam_id)) # Check Cameraid datatype
+                    # print(cam_id) # PRint the id for verification of data
+                    try:
+                        icam_id = int(cam_id) # Change the camera id str to int
+                        # print(type(icam_id))
+                    except ValueError:
+                        print("Invalid string for conversion")
+
+                    camera=CameraChowkiController.get_camera_by_id(cam_id)
+
+
+                    if 'error' not in camera:
+                        camera_location=camera.get('Direction')
+                        camera_type = camera.get('Camera Type')
+                        match camera_type:
+                            case "front":
+                                print("This is the front camera.")
+                                image_list.append(image)
+                                violations_and_plates=Controller.YoloController.detect_violations_from_frontImage(image)
+
+                                for i, item in enumerate(violations_and_plates):
+                                    print(f"\nResult Front #{i + 1}")
+                                    violations = item.get('violations', [])
+                                    cropped_plate = item.get('cropped_license_plate')
+
+                                    if violations:
+                                        print("Violations Detected:")
+                                        for violation in violations:
+                                            print(f" - {violation}")
+                                    else:
+                                        print("No violations detected.")
+
+                                    if cropped_plate is not None:
+
+                                        extracted_plate_text=Controller.OCR.NumberExtractor(cropped_plate)
+                                        print(f"return number plate from ocr to challan {extracted_plate_text}")
+
+                                        # cv2.imshow(f"Cropped License Plate {i + 1}", cropped_plate)
+                                        # cv2.waitKey(0)
+                                        # cv2.destroyAllWindows()
+                                        cropped_plate = Image.fromarray(cropped_plate)
+                                        image_list.append(cropped_plate)
+                                    else:
+                                        extracted_plate_text=""
+                                        print("No license plate image found.")
+
+                            case "side":
+                                print("This is the side camera.")
+                                image_list.append(image)
+                                detectedviolations = Controller.YoloController.detect_violations_from_sideImage(image)
+                                for i, item in enumerate(detectedviolations):
+                                    print(f"\nResult Side #{i + 1}")
+                                    violations = item.get('violations', [])
+
+
+                                    if violations:
+                                        print("Violations Detected:")
+                                        for violation in violations:
+                                            print(f" - {violation}")
+                                    else:
+                                        print("No violations detected.")
+                            case _:
+                                print("Unknown camera type.")
+                violations_ids = []
+                bikenumber = extracted_plate_text
+                if bikenumber != "":
+                    print(f"Checking OverSpeed for {bikenumber}")
+                    result=ChallanController.CheckOverspeed_detected_vehicle(bikenumber, cam_id, image_list, date )
+                    if result:
+                        violations_ids.append(10)
+
+                    stolen = ChallanController.Check_Driven(extracted_plate_text)
+                    if stolen:
+
+                        print("🚨 Bike is Travel More than 100 Km in a day")
+                    else:
+                        print("✅ Bike is Less Travel than 100 Km in a day")
+
+                print(f"Bike Number of Violator is {bikenumber}")
+                try:
+                    bike = ChallanController.get_vehicle_by_licenseplate(bikenumber)
+                    if 'error' in bike:
+                        message = ChallanController.add_vehicle(bikenumber, 'Bike')
+                        if 'Successfully' in message:
+                            bike = ChallanController.get_vehicle_by_licenseplate(bikenumber)
+                    print(bike['id'], "bike id")
+                except Exception as e:
+                    print(f"error in bike : {str(e)}")
+                    return jsonify({"message": f"An error occurred in getting Bike: {str(e)}"}), 500
+
+                print(bike)
+                status = 'Pending'
+                created_date = datetime.today().strftime('%Y-%m-%d')
+                print(cam_id, bikenumber, camera_location, status, created_date)
+
+                try:
+
+                    detection_fromfront = violations_and_plates[0]["violations"]
+                    print("Front Camera Violation: " + ', '.join(detection_fromfront))
+
+
+                    detection_fromside = detectedviolations[0]["violations"]
+                    print("Side Camera Violation: " + ', '.join(detection_fromside))
+                    for i in detection_fromfront:
+                        if i == 'Side Mirrors' and  "Side Mirrors" in detection_fromside:
+                            violations_ids.append(3)
+
+
+
+                    for i in detection_fromside:
+                        if i == 'Helmet':
+                            violations_ids.append(1)
+                        elif i.__contains__('Persons'):
+                            violations_ids.append(2)
+
+
+                except Exception as e:
+                    print(f"error in adding violation : {str(e)}")
+                    return jsonify({"message": f"An error occurred getting Violations: {str(e)}"}), 500
+
+                if stolen:
+                    try:
+                        print(f"Travel Limit Exceed Bike detected  {len(image_list)}")
+                        response, code = ChallanController.add_violation_history_and_details_forTravel(bike['id'],
+                                                                                                            camera_location,
+                                                                                                            status,
+                                                                                                            cam_id,[11],
+                                                                                                            image_list,
+                                                                                                            bikenumber)
+                        if code == 201:
+                            print("Sucessfully Sent Notification of TRavel Limit Exceed Bike")
+                        else:
+                            print("Error in Sent Notification of Travel Limit of  Bike")
+                    except Exception as e:
+                        print(f"error in add Violation History : {str(e)}")
+                        return jsonify(
+                            {"message": f"An error occurred add Travel Limit Violation History: {str(e)}"}), 500
                 try:
                     print(f"Image Length Which Save against this violation {len(image_list)}")
                     response, code = ChallanController.add_violation_history_and_details(bike['id'],
@@ -1346,4 +2064,169 @@ class ChallanController:
             # Handle exceptions that may occur
             print(str(e))
             return {"message": f"An error occurred: {str(e)}"}, 500
+
+
+    def SimulationParallel_autoviolationdetection_fromFolder(camera_images):
+        try:
+            if not camera_images:
+                print("message: camera_images is empty")
+                return jsonify({"message": "camera_images is empty"}), 400
+
+            for cam_id, image_pair in camera_images.items():
+                image_list = []
+                extracted_plate_text = ""
+                violations_and_plates = []
+                detectedviolations = []
+
+                try:
+                    icam_id = int(cam_id)
+                except ValueError:
+                    print(f"Invalid camera_id: {cam_id}")
+                    continue
+
+                camera = CameraChowkiController.get_camera_by_id(cam_id)
+                if 'error' in camera:
+                    print(f"Camera not found for ID: {cam_id}")
+                    continue
+
+                camera_location = camera.get('Direction')
+                camera_type = camera.get('Camera Type')
+
+                # Ensure exactly 2 images (front, side)
+                if len(image_pair) != 2:
+                    print(f"Camera {cam_id} does not have exactly 2 images.")
+                    continue
+
+                front_image = image_pair[0]
+                side_image = image_pair[1]
+
+                # --- Process Front Image ---
+                print(f"\nProcessing Front image for Camera {cam_id}")
+                image_list.append(front_image)
+                violations_and_plates = Controller.YoloController.detect_violations_from_frontImage(front_image)
+
+                for i, item in enumerate(violations_and_plates):
+                    print(f"Result Front #{i + 1}")
+                    violations = item.get('violations', [])
+                    cropped_plate = item.get('cropped_license_plate')
+
+                    if violations:
+                        print("Violations Detected (Front):")
+                        for violation in violations:
+                            print(f" - {violation}")
+                    else:
+                        print("No violations detected (Front).")
+
+                    if cropped_plate is not None:
+                        enhanced_plate = Controller.YoloController.apply_clahe_on_plate_crop(cropped_plate)
+                        extracted_plate_text = Controller.OCR.NumberExtractor(enhanced_plate)
+                        print(f"Extracted number plate: {extracted_plate_text}")
+                        # cv2.imshow(f"Cropped License Plate {i + 1}", enhanced_plate)
+                        # cv2.waitKey(0)
+                        # cv2.destroyAllWindows()
+                        cropped_plate_img = Image.fromarray(cropped_plate)
+                        image_list.append(cropped_plate_img)
+                    else:
+                        print("No cropped license plate found.")
+
+                # --- Process Side Image ---
+                print(f"\nProcessing Side image for Camera {cam_id}")
+                image_list.append(side_image)
+                detectedviolations = Controller.YoloController.detect_violations_from_sideImage(side_image)
+
+                for i, item in enumerate(detectedviolations):
+                    print(f"Result Side #{i + 1}")
+                    violations = item.get('violations', [])
+                    if violations:
+                        print("Violations Detected (Side):")
+                        for violation in violations:
+                            print(f" - {violation}")
+                    else:
+                        print("No violations detected (Side).")
+
+                # --- Lookup or Insert Bike ---
+                bikenumber = extracted_plate_text
+                print(f"Bike Number of Violator: {bikenumber}")
+
+                try:
+                    bike = ChallanController.get_vehicle_by_licenseplate(bikenumber)
+                    if 'error' in bike:
+                        message = ChallanController.add_vehicle(bikenumber, 'Bike')
+                        if 'Successfully' in message:
+                            bike = ChallanController.get_vehicle_by_licenseplate(bikenumber)
+                    print(f"Bike ID: {bike['id']}")
+                except Exception as e:
+                    print(f"Error in getting/creating bike: {str(e)}")
+                    continue
+
+                # --- Prepare Violation Details ---
+                status = 'Pending'
+                created_date = datetime.today().strftime('%Y-%m-%d')
+                violations_ids = []
+
+                try:
+                    detection_fromfront = violations_and_plates[0].get("violations", [])
+                    detection_fromside = detectedviolations[0].get("violations", [])
+
+                    for v in detection_fromfront:
+                        if v == 'Side Mirrors' and 'Side Mirrors' in detection_fromside:
+                            violations_ids.append(3)
+
+                    for v in detection_fromside:
+                        if v == 'Helmet':
+                            violations_ids.append(1)
+                        elif 'Persons' in v:
+                            violations_ids.append(2)
+
+                except Exception as e:
+                    print(f"Error processing violations: {str(e)}")
+                    continue
+
+                # --- Save Violation Record ---
+                try:
+                    print(f"Saving {len(image_list)} images for camera {cam_id}")
+                    response, code = ChallanController.add_violation_history_and_details(
+                        bike['id'], camera_location, status, cam_id,
+                        violations_ids, image_list, bikenumber
+                    )
+                except Exception as e:
+                    print(f"Error saving violation history: {str(e)}")
+                    continue
+
+            return jsonify({"message": "All camera images processed"}), 200
+
+        except Exception as e:
+            print(f"Unexpected Error: {str(e)}")
+            return jsonify({"message": f"An unexpected error occurred: {str(e)}"}), 500
+
+    def is_challan_allowed(license_plate):
+        try:
+            # Step 1: Get current PC time
+            current_time = datetime.now()
+
+            # Step 2: Fetch last challan
+            last_challan = (
+                Challan.query
+                .filter_by(vehicle_number=license_plate)
+                .order_by(desc(Challan.challan_date))
+                .first()
+            )
+
+            # Step 3: Handle first time challan
+            if not last_challan:
+                print("✅ No previous challan found. Allowed.")
+                return {"status": "Allowed", "reason": "No previous challan"}
+
+            # Step 4: Calculate time difference
+            time_diff = current_time - last_challan.challan_date
+
+            if time_diff > timedelta(hours=2):
+                print(f"✅ Last challan was {time_diff} ago. Allowed.")
+                return {"status": "Allowed", "reason": f"Last challan was {time_diff} ago"}
+            else:
+                print(f"⛔ Last challan was {time_diff} ago. Not allowed.")
+                return {"status": "Not Allowed", "reason": f"Challan recently issued {time_diff} ago"}
+
+        except Exception as e:
+            return {"status": "Error", "reason": str(e)}
 

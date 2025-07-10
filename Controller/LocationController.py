@@ -1,4 +1,10 @@
-from Model import City,Place,Direction ,db
+from collections import deque, defaultdict
+
+from shapely.lib import distance
+from sympy.codegen import Print
+
+from Model import City, Place, Direction, db, PlaceDistance
+
 
 class LocationController:
 
@@ -209,3 +215,109 @@ class LocationController:
         direction.name = new_name
         db.session.commit()
         return {"message": f"Direction name updated from {direction_name} to {new_name}"}, 201
+
+
+    @staticmethod
+    def add_place_distance(from_id, to_id, distance_km):
+        existing = PlaceDistance.query.filter_by(FromPlaceID=from_id, ToPlaceID=to_id).first()
+        if existing:
+            existing.DistanceKM = distance_km  # update if needed
+        else:
+            new_entry = PlaceDistance(
+                FromPlaceID=from_id,
+                ToPlaceID=to_id,
+                DistanceKM=distance_km
+            )
+            db.session.add(new_entry)
+        db.session.commit()
+
+
+    @staticmethod
+    def get_distance_between_places(from_place_id: int, to_place_id: int) -> float | None:
+        # Try direct match
+        distance_record = PlaceDistance.query.filter_by(
+            FromPlaceID=from_place_id,
+            ToPlaceID=to_place_id
+        ).first()
+
+        # If not found, try reverse (assuming distance is symmetrical)
+        if not distance_record:
+            distance_record = PlaceDistance.query.filter_by(
+                FromPlaceID=to_place_id,
+                ToPlaceID=from_place_id
+            ).first()
+
+        if distance_record:
+            return distance_record.DistanceKM
+        else:
+            return None  # Or raise an error if required
+
+
+    @staticmethod
+    def get_distance_between_two_places():
+        Places_Dista=PlaceDistance.query.all()
+        return [{'ID':place.ID ,'FromPlaceID':place.FromPlaceID,'ToPlaceID':place.ToPlaceID,'DistanceKM':place.DistanceKM  }for place in Places_Dista]
+
+
+
+    @staticmethod
+    def check_distance(from_place_id_1,to_place_id_1):
+        graph=LocationController.get_distance_between_two_places()
+        distance=0
+        staus=False
+        reciverstatus=False
+        for i in graph:
+            print('Enter in First LOOp')
+            dis= i["DistanceKM"]
+            fromplace= i["FromPlaceID"]
+            toplace= i["ToPlaceID"]
+
+            print(f"Distance {dis}")
+            print(f"fromplace {fromplace}")
+            print(f"toplace {toplace}")
+            print()
+            if from_place_id_1 == fromplace :
+                print(f"From Place MAtch")
+                staus=True
+                distance=distance+dis
+                print(f"Distance  is set to {distance}\n")
+            elif to_place_id_1 == toplace:
+                distance = distance + dis
+                print(f"to PlACE fOUND Distance  is set to {distance}")
+                reciverstatus = True
+                staus = False
+            elif staus and not reciverstatus:
+                distance=distance+dis
+                print(f"Adding Distance  is set to {distance}")
+        if not reciverstatus:
+            distance = 0
+            staus = False
+            reciverstatus = False
+            for i in graph:
+                print('Enter in First LOOp')
+                dis = i["DistanceKM"]
+                fromplace = i["FromPlaceID"]
+                toplace = i["ToPlaceID"]
+
+                print(f"Distance {dis}")
+                print(f"fromplace {fromplace}")
+                print(f"toplace {toplace}")
+                print()
+                if to_place_id_1 == fromplace:
+                    print(f"From Place MAtch")
+                    staus = True
+                    distance = distance + dis
+                    print(f"Distance  is set to {distance}\n")
+                elif from_place_id_1 == toplace:
+                    distance = distance + dis
+                    print(f"to PlACE fOUND Distance  is set to {distance}")
+                    reciverstatus = True
+                    staus = False
+                elif staus and not reciverstatus:
+                    distance = distance + dis
+                    print(f"Adding Distance  is set to {distance}")
+        print(distance)
+        return {'Distance':distance}
+
+
+
